@@ -40,37 +40,40 @@ Configuration is managed via `.env` (copied from `.env.example`):
 
 ## 🛠️ Step-by-Step Deployment
 
-### Step 1: Configure Environment Variables
+### Step 1: Copy and Configure `.env` File
 
-Create your `.env` file from `.env.example` and set your project details:
+1. **Copy the example configuration template**:
+   ```bash
+   cp .env.example .env
+   ```
 
-```bash
-cp .env.example .env
-```
+2. **Open and edit `.env`** using your preferred text editor (e.g., `nano`, `vim`, or VS Code):
+   ```bash
+   nano .env
+   ```
 
-Edit `.env` with your preferred values:
+3. **Populate your specific environment values**:
+   ```env
+   # Google Cloud Hosting Project ID (where Cloud Run is deployed)
+   PROJECT_ID=<YOUR_GCP_PROJECT_ID>
 
-```env
-# Google Cloud Hosting Project ID (where Cloud Run is deployed)
-PROJECT_ID=<YOUR_GCP_PROJECT_ID>
+   # Cloud Run Region (e.g., us-central1)
+   REGION=us-central1
 
-# Cloud Run Region
-REGION=us-central1
+   # Service Name (e.g., mcp-secops-mcp-server)
+   SERVICE_NAME=mcp-secops-mcp-server
 
-# Service Name
-SERVICE_NAME=mcp-secops-mcp-server
+   # Service Account of the calling agent (for IAM Invoker binding)
+   RUNNER_SA=<YOUR_AGENT_RUNNER_SERVICE_ACCOUNT_EMAIL>
 
-# Service Account of the calling agent (for IAM Invoker binding)
-RUNNER_SA=<YOUR_AGENT_RUNNER_SERVICE_ACCOUNT_EMAIL>
+   # Chronicle / SecOps Instance Settings
+   CHRONICLE_PROJECT_ID=<YOUR_CHRONICLE_PROJECT_ID>
+   CHRONICLE_CUSTOMER_ID=<YOUR_CHRONICLE_CUSTOMER_ID>
+   CHRONICLE_REGION=us
 
-# Chronicle / SecOps Instance Settings
-CHRONICLE_PROJECT_ID=<YOUR_CHRONICLE_PROJECT_ID>
-CHRONICLE_CUSTOMER_ID=<YOUR_CHRONICLE_CUSTOMER_ID>
-CHRONICLE_REGION=us
-
-# Logging
-LOG_LEVEL=INFO
-```
+   # Logging
+   LOG_LEVEL=INFO
+   ```
 
 ### Step 2: Authenticate and Set Google Cloud Project
 
