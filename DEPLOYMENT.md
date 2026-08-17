@@ -1,107 +1,88 @@
-# Google SecOps MCP Server - Step-by-Step Cloud Run Deployment Guide
+# 🚀 Google SecOps (Chronicle) MCP Server Deployment Guide
 
-This guide details the complete, step-by-step process to deploy the **Google Chronicle Security Operations (SecOps) MCP Server** to Google Cloud Run using environment variables and Streamable HTTP transport.
-
----
-
-## 📋 Table of Contents
-1. [Architecture & Overview](#1-architecture--overview)
-2. [Prerequisites](#2-prerequisites)
-3. [Step 1: Configure Environment Variables](#step-1-configure-environment-variables)
-4. [Step 2: Authenticate and Set Google Cloud Project](#step-2-authenticate-and-set-google-cloud-project)
-5. [Step 3: Enable Required Google Cloud APIs](#step-3-enable-required-google-cloud-apis)
-6. [Step 4: Deploy to Cloud Run](#step-4-deploy-to-cloud-run)
-7. [Step 5: Configure IAM Permissions](#step-5-configure-iam-permissions)
-8. [Step 6: Test and Verify Endpoints](#step-6-test-and-verify-endpoints)
-9. [Step 7: Connect to Security Agents & Gemini Enterprise](#step-7-connect-to-security-agents--gemini-enterprise)
-10. [Troubleshooting & FAQs](#10-troubleshooting--faqs)
+This guide details step-by-step instructions for deploying and validating the **Google Chronicle Security Operations (SecOps) MCP Server** on Google Cloud Run using the **Streamable HTTP transport standard (`/mcp`)** with complete enterprise IAM authentication.
 
 ---
 
-## 1. Architecture & Overview
+## 📋 Architecture & Standards
 
-* **Protocol**: Model Context Protocol (MCP) Standard (`2024-11-05`)
-* **Transport**: Streamable HTTP / SSE
-* **Official Tools**: All 29 Google SecOps tools (Investigation, YARA-L Rules, Ingestion, Parsers, Data Tables, Reference Lists)
-* **Hosting**: Google Cloud Run (Serverless Container with HTTPS)
-
----
-
-## 2. Prerequisites
-
-Ensure you have the following installed and configured:
-* [Google Cloud SDK (`gcloud`)](https://cloud.google.com/sdk/docs/install)
-* `curl` and `python3` (3.10+)
-* An active Google Cloud Project with Cloud Run and Cloud Build enabled
+- **Protocol**: Model Context Protocol (MCP) Streamable HTTP Transport (`2024-11-05`)
+- **MCP Endpoint**: `https://<YOUR-CLOUD-RUN-URL>/mcp`
+- **Fallback Endpoints**: Zero-redirect `/mcp/`, `/healthz`, `/health`, `/status`
+- **Tool Suite**: 29 Official Google SecOps Tools:
+  - **Investigation**: `get_security_alerts`, `get_alert_details`, `get_asset_timeline`, `get_domain_timeline`, `get_user_timeline`, `search_security_events`, `search_iocs`
+  - **Detection / YARA-L Rules**: `list_detection_rules`, `get_detection_rule`, `create_detection_rule`, `update_detection_rule`, `enable_detection_rule`, `disable_detection_rule`, `verify_rule_syntax`, `list_rule_executions`
+  - **Ingestion & Data Tables**: `get_ingestion_metrics`, `create_data_table`, `list_data_tables`, `query_data_table`, `insert_data_table_rows`
+  - **Reference Lists & Parsers**: `list_reference_lists`, `get_reference_list`, `update_reference_list`, `list_log_parsers`, `get_parser_details`, `submit_parser_extension`
+  - **SecOps Context**: `get_entity_summary`, `get_curated_detections`
+- **Hosting**: Google Cloud Run (Serverless Container with Managed HTTPS)
+- **Security**: Google Cloud IAM OAuth2 / ID Tokens (`roles/run.invoker`)
 
 ---
 
-## Step 1: Configure Environment Variables
+## ⚙️ Environment Variables & Configuration
 
-Create or update your `.env` file in the project directory:
+Configuration is managed via `.env` (copied from `.env.example`):
+
+| Variable | Required | Description | Example / Placeholder | Source |
+| :--- | :---: | :--- | :--- | :--- |
+| `PROJECT_ID` | **Yes** | Google Cloud Project ID hosting Cloud Run | `<YOUR_PROJECT_ID>` | `.env` / GCP |
+| `REGION` | **Yes** | Cloud Run deployment region | `us-central1` | `.env` |
+| `SERVICE_NAME` | **Yes** | Cloud Run service name | `mcp-secops-mcp-server` | `.env` |
+| `CHRONICLE_PROJECT_ID` | Optional | GCP Project where Chronicle is provisioned (defaults to `PROJECT_ID`) | `<YOUR_CHRONICLE_PROJECT_ID>` | `.env` / GCP |
+| `CHRONICLE_CUSTOMER_ID` | Optional | Chronicle Customer/Instance ID (UUID). Leave empty for fallback simulation mode. | `<YOUR_CHRONICLE_CUSTOMER_ID>` | Chronicle Console |
+| `CHRONICLE_REGION` | Optional | Chronicle API Region (`us`, `eu`, `asia-southeast1`, `me-central2`) | `us` | `.env` |
+| `RUNNER_SA` | Optional | Service account email of the calling agent (for IAM Invoker binding) | `runner-sa@<PROJECT_ID>.iam.gserviceaccount.com` | `.env` / IAM |
+| `SECOPS_SA_PATH` | Optional | Path to local Service Account JSON key (if not using ADC) | `/path/to/sa.json` | Local File |
+| `LOG_LEVEL` | Optional | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` | `.env` |
+
+---
+
+## 🛠️ Step-by-Step Deployment
+
+### Step 1: Configure Environment Variables
+
+Create your `.env` file from `.env.example` and set your project details:
 
 ```bash
 cp .env.example .env
 ```
 
-Populate the `.env` file with your specific environment values:
+Edit `.env` with your preferred values:
 
 ```env
-# ==============================================================================
-# GOOGLE CLOUD PLATFORM CONFIGURATION
-# ==============================================================================
+# Google Cloud Hosting Project ID (where Cloud Run is deployed)
 PROJECT_ID=<YOUR_GCP_PROJECT_ID>
-REGION=<YOUR_GCP_REGION>
-SERVICE_NAME=<YOUR_SERVICE_NAME>
 
-# ==============================================================================
-# GOOGLE SECOPS (CHRONICLE) CONFIGURATION
-# ==============================================================================
-CHRONICLE_CUSTOMER_ID=<YOUR_CHRONICLE_CUSTOMER_ID>
+# Cloud Run Region
+REGION=us-central1
+
+# Service Name
+SERVICE_NAME=mcp-secops-mcp-server
+
+# Service Account of the calling agent (for IAM Invoker binding)
+RUNNER_SA=<YOUR_AGENT_RUNNER_SERVICE_ACCOUNT_EMAIL>
+
+# Chronicle / SecOps Instance Settings
 CHRONICLE_PROJECT_ID=<YOUR_CHRONICLE_PROJECT_ID>
-CHRONICLE_REGION=<YOUR_CHRONICLE_REGION>
+CHRONICLE_CUSTOMER_ID=<YOUR_CHRONICLE_CUSTOMER_ID>
+CHRONICLE_REGION=us
 
-# ==============================================================================
-# IAM & AGENT RUNNER SERVICE ACCOUNT
-# ==============================================================================
-AGENT_RUNNER_SA=<YOUR_AGENT_RUNNER_SERVICE_ACCOUNT_EMAIL>
-
-# ==============================================================================
-# SERVER RUNTIME OPTIONS
-# ==============================================================================
-PORT=8080
+# Logging
 LOG_LEVEL=INFO
 ```
 
-### Export Variables to Shell
-
-Load the variables into your active terminal session:
+### Step 2: Authenticate and Set Google Cloud Project
 
 ```bash
-set -a
-source .env
-set +a
-```
-
----
-
-## Step 2: Authenticate and Set Google Cloud Project
-
-Authenticate your gcloud CLI session and set the target project:
-
-```bash
-# Authenticate User Account
+# Log in with your Google Cloud account
 gcloud auth login
 
-# Set active project
+# Set active deployment project
 gcloud config set project "$PROJECT_ID"
 ```
 
----
-
-## Step 3: Enable Required Google Cloud APIs
-
-Enable Cloud Run, Cloud Build, Artifact Registry, and Chronicle APIs:
+### Step 3: Enable Required Google Cloud APIs
 
 ```bash
 gcloud services enable \
@@ -113,50 +94,62 @@ gcloud services enable \
   --project="$PROJECT_ID"
 ```
 
----
+### Step 4: Deploy to Google Cloud Run
 
-## Step 4: Deploy to Cloud Run
-
-Deploy directly from source using `gcloud run deploy`:
+#### Option A: Automated Script (Recommended)
+Run the bundled deployment script:
 
 ```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+The script will automatically:
+1. Source `.env` configuration.
+2. Enable necessary Google Cloud APIs.
+3. Build and deploy container to Cloud Run with optimal settings (`--session-affinity`, `--min-instances=1`, `--timeout=300`).
+4. Bind `roles/run.invoker` for your agent's service account and active gcloud user.
+5. Print live service endpoints.
+
+#### Option B: Direct `gcloud` Command
+Alternatively, deploy directly using `gcloud run deploy`:
+
+```bash
+set -a && source .env && set +a
+
 gcloud run deploy "$SERVICE_NAME" \
   --source=. \
   --region="$REGION" \
   --project="$PROJECT_ID" \
   --platform=managed \
+  --ingress=all \
   --no-allow-unauthenticated \
-  --set-env-vars="CHRONICLE_CUSTOMER_ID=${CHRONICLE_CUSTOMER_ID},CHRONICLE_PROJECT_ID=${CHRONICLE_PROJECT_ID},CHRONICLE_REGION=${CHRONICLE_REGION},LOG_LEVEL=${LOG_LEVEL}" \
-  --memory=1Gi \
-  --cpu=1 \
-  --min-instances=0 \
+  --session-affinity \
+  --min-instances=1 \
   --max-instances=10 \
-  --timeout=300
+  --timeout=300 \
+  --set-env-vars="CHRONICLE_CUSTOMER_ID=${CHRONICLE_CUSTOMER_ID},CHRONICLE_PROJECT_ID=${CHRONICLE_PROJECT_ID:-$PROJECT_ID},CHRONICLE_REGION=${CHRONICLE_REGION:-us},LOG_LEVEL=${LOG_LEVEL:-INFO}"
 ```
-
-> **Tip**: You can also run the automated deployment script:
-> ```bash
-> chmod +x deploy.sh
-> ./deploy.sh
-> ```
 
 ---
 
-## Step 5: Configure IAM Permissions
+## 🔐 Step 5: Configure IAM Permissions
 
-Grant the `roles/run.invoker` role to your Agent Runner Service Account and administrator user so they can securely invoke the Cloud Run service:
+Grant `roles/run.invoker` to the Agent Runner Service Account:
 
 ```bash
-# 1. Grant Invoker role to Agent Runner Service Account
-if [ -n "$AGENT_RUNNER_SA" ]; then
+if [ -n "$RUNNER_SA" ]; then
   gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
-    --member="serviceAccount:${AGENT_RUNNER_SA}" \
+    --member="serviceAccount:${RUNNER_SA}" \
     --role="roles/run.invoker"
 fi
+```
 
-# 2. Grant Invoker role to active user for testing
+Grant `roles/run.invoker` to your personal account for local testing:
+
+```bash
 ACTIVE_USER=$(gcloud config get-value account 2>/dev/null)
 if [ -n "$ACTIVE_USER" ]; then
   gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
@@ -169,65 +162,115 @@ fi
 
 ---
 
-## Step 6: Test and Verify Endpoints
+## 🧪 Step 6: Testing & Verification
 
-Obtain the deployed Cloud Run service URL:
+Retrieve your deployed Cloud Run service URL and an identity token:
 
 ```bash
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)")
 TOKEN=$(gcloud auth print-identity-token)
 
-echo "Service URL: $SERVICE_URL"
+echo "Deployed Service URL: $SERVICE_URL"
 ```
 
-### 1. Health Probe Verification
-```bash
-curl -i -s -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/health"
-```
-*Expected Output*: `HTTP/2 200 OK` with `{"status":"ok","service":"secops-mcp-server",...}`
-
-### 2. Streamable HTTP Discovery Probe (`/mcp` and `/mcp/`)
-```bash
-curl -i -s -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/mcp"
-```
-*Expected Output*: `HTTP/2 200 OK` (No 307 redirect!)
-
-### 3. MCP Protocol Initialization
-```bash
-curl -i -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "$SERVICE_URL/mcp" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}'
-```
-*Expected Output*: `HTTP/2 200 OK` with `protocolVersion: "2024-11-05"`.
-
-### 4. Execute a SecOps MCP Tool Call (`get_security_alerts`)
-```bash
-curl -i -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  "$SERVICE_URL/mcp" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_security_alerts","arguments":{"severity":"CRITICAL","limit":1}}}'
-```
-*Expected Output*: `HTTP/2 200 OK` with JSON-RPC alert investigation details.
-
-### 5. Automated Python Test Suite
+### 1. Automated Test Suite
 Run the included comprehensive test client:
+
 ```bash
 TARGET_URL="$SERVICE_URL" AUTH_TOKEN="$TOKEN" python3 test_client.py
 ```
 
+### 2. Manual HTTP Probes via cURL
+
+#### Health Check
+```bash
+curl -i -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/healthz"
+```
+*Expected Output*: `HTTP/2 200 OK` with `{"status":"ok","service":"secops-mcp-server",...}`
+
+#### MCP Discovery Probe (Zero-Redirect GET)
+```bash
+curl -i -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/mcp"
+```
+*Expected Output*: `HTTP/2 200 OK`
+
+#### MCP Protocol Initialization (`initialize`)
+```bash
+curl -i -X POST "$SERVICE_URL/mcp" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "test-client", "version": "1.0"}
+    }
+  }'
+```
+
+#### SecOps Tool Execution (`get_security_alerts`)
+```bash
+curl -i -X POST "$SERVICE_URL/mcp" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "get_security_alerts",
+      "arguments": {
+        "severity": "CRITICAL",
+        "limit": 5
+      }
+    }
+  }'
+```
+
+#### List Detection Rules (`list_detection_rules`)
+```bash
+curl -i -X POST "$SERVICE_URL/mcp" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "list_detection_rules",
+      "arguments": {
+        "page_size": 10
+      }
+    }
+  }'
+```
+
 ---
 
-## Step 7: Connect to Security Agents & Gemini Enterprise
+## 🤖 Step 7: Security Agent & Gemini Enterprise Integration
 
 To connect the SecOps MCP server to your security agents or Gemini Enterprise:
 
-1. **MCP Endpoint URL**:
-   ```text
-   https://<your-service-url>/mcp
-   ```
-2. **Transport**: `Streamable HTTP` (or `SSE`)
-3. **Authentication**: `Google Cloud IAM / OAuth Bearer Token`
-4. **Tool Capability**: 29 Official Tools automatically discovered via `tools/list`.
+- **Protocol**: Model Context Protocol (MCP)
+- **Transport**: `Streamable HTTP` (recommended) or `SSE`
+- **Endpoint URL**: `https://<YOUR-CLOUD-RUN-URL>/mcp`
+- **Authentication**: Service Account / Google Cloud OAuth2 Bearer Token
+- **Tools Discovered**: 29 SecOps tools automatically enumerated via `tools/list`
 
 ---
 
+## ❓ Troubleshooting & FAQs
 
+### Issue: `401 Unauthorized` or `403 Forbidden`
+- Ensure you generate a valid identity token: `gcloud auth print-identity-token`
+- Verify the calling user or service account has been granted `roles/run.invoker` on the Cloud Run service.
+
+### Issue: `307 Temporary Redirect` on `/mcp`
+- The server has native support for `/mcp`, `/mcp/`, and `/mcp/{path}` to prevent trailing-slash redirects that break standard HTTP POST client implementations.
+
+### Issue: Chronicle API Authentication
+- If Chronicle is in a separate GCP project, ensure the Cloud Run service account has `roles/chronicle.viewer` or `roles/chronicle.admin` in the Chronicle project.
+- If `CHRONICLE_CUSTOMER_ID` is unset, the MCP server automatically operates in simulated fallback mode for safe staging and development.

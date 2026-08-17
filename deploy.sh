@@ -32,10 +32,10 @@ else
 fi
 
 # 1.2 Resolve Core Deployment Variables with defaults
-DEPLOY_PROJECT_ID="${PROJECT_ID:-gemini-entreprise-494918}"
+DEPLOY_PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 REGION="${REGION:-us-central1}"
 SERVICE_NAME="${SECOPS_SERVICE_NAME:-${SERVICE_NAME:-secops-mcp-server}}"
-RUNNER_SA="${RUNNER_SA:-google-security-agent-runner@gemini-entreprise-494918.iam.gserviceaccount.com}"
+RUNNER_SA="${RUNNER_SA:-}"
 
 # 1.3 Resolve Chronicle / SecOps Variables
 CHRONICLE_PROJECT_ID="${CHRONICLE_PROJECT_ID:-$DEPLOY_PROJECT_ID}"
@@ -114,12 +114,14 @@ gcloud run deploy "$SERVICE_NAME" \
 echo "🔐 [Step 4/5] Configuring IAM Policy Bindings (roles/run.invoker)..."
 
 # Grant to Agent Runner Service Account
-echo "  • Granting roles/run.invoker to runner service account: $RUNNER_SA"
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-    --project="$DEPLOY_PROJECT_ID" \
-    --region="$REGION" \
-    --member="serviceAccount:$RUNNER_SA" \
-    --role="roles/run.invoker" || true
+if [[ -n "$RUNNER_SA" ]]; then
+    echo "  • Granting roles/run.invoker to runner service account: $RUNNER_SA"
+    gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+        --project="$DEPLOY_PROJECT_ID" \
+        --region="$REGION" \
+        --member="serviceAccount:$RUNNER_SA" \
+        --role="roles/run.invoker" || true
+fi
 
 # Grant to Active Authenticated User for testing
 ACTIVE_USER=$(gcloud config get-value account 2>/dev/null || echo "")
