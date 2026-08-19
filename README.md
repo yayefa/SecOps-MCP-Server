@@ -52,23 +52,6 @@ Streamable HTTP is the standard remote transport for Model Context Protocol (MCP
 
 ---
 
-## 🚀 Quick Start: Run Locally
-
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Start the Server
-```bash
-export PORT=8080
-export HOST=0.0.0.0
-python server.py
-```
-
-The Streamable HTTP server is now accessible at:
-- Streamable HTTP Endpoint: `http://localhost:8080/mcp`
-- Health Probe: `http://localhost:8080/healthz`
 
 ---
 
