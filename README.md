@@ -9,7 +9,7 @@ Enterprise Model Context Protocol (MCP) server providing Google SecOps (Chronicl
 Streamable HTTP is the standard remote transport for Model Context Protocol (MCP) servers:
 - **Unified Endpoint (`/mcp`)**: Single endpoint for client-to-server messaging, tool discovery, and bi-directional communication.
 - **Production Scalability**: Seamlessly deployed to stateless and containerized platforms like **Google Cloud Run**.
-- **Container Health Probes**: Built-in `/healthz` liveness and readiness probes.
+- **Container Health Probes**: Built-in `/health` liveness and readiness probes.
 - **Enterprise Security**: Native Google Cloud IAM authentication (`roles/run.invoker`) with OAuth2/OIDC token support.
 
 ---
