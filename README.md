@@ -52,9 +52,6 @@ Streamable HTTP is the standard remote transport for Model Context Protocol (MCP
 
 ---
 
-
----
-
 ## ☁️ One-Click Deployment to Google Cloud Run
 
 Deploy directly using the automated deployment script:
